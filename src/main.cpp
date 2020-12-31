@@ -3,6 +3,9 @@
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include "DHT.h"
+#include "driver/adc.h"
+#include <esp_wifi.h>
+#include <esp_bt.h>
 
 #define ENABLE_GxEPD2_GFX 0
 #include <GxEPD2_BW.h>
@@ -32,15 +35,16 @@ const String key = "92d5346233bb17d38c01bb14827fd07a"; //API key
 
 DHT dht(DHTPIN, DHTTYPE);
 
-float temp;
-float hindex;
-int hum;
-const char* description;
+//The data got not lost after deep sleep
+RTC_DATA_ATTR float temp = 0; 
+RTC_DATA_ATTR float hindex = 273.15;
+RTC_DATA_ATTR int hum = 0;
 
 #define uS_TO_S_FACTOR 1000000  /* Conversion factor for micro seconds to seconds */
-#define TIME_TO_SLEEP  10        /* Time ESP32 will go to sleep (in seconds) */
+#define TIME_TO_SLEEP  60*30        /* Time ESP32 will go to sleep (in seconds) */
 
 void setup() {
+  setCpuFrequencyMhz(160);  //@80Mhz the DHT11 has problems at reading Data
   Serial.begin(115200);
   delay(100);
   display.init(115200);
@@ -50,14 +54,16 @@ void setup() {
   display.setTextColor(GxEPD_BLACK);
   dht.begin();
   WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) {
+  if (WiFi.status() != WL_CONNECTED) {
     delay(1000);
     Serial.println("Connecting to WiFi..");
   } 
+  if (WiFi.status() != WL_CONNECTED){
+    Serial.println("not connected");
+  }
   Serial.println("Connected to the WiFi network");
-}
 
-void loop() {
+  
   if ((WiFi.status() == WL_CONNECTED)) { //Check the current connection status
     HTTPClient http;
     http.begin(endpoint + location + "&appid=" + key);
@@ -75,10 +81,11 @@ void loop() {
       //Serial.println(payload);
           
           
-      description = doc["weather"][0]["description"];
+      //description = doc["weather"][0]["description"];
       temp = doc["main"]["temp"];
       temp = temp - 273.15;
       hindex = doc["main"]["feels_like"];
+      hindex = hindex - 273.15;
       hum = doc["main"]["humidity"];
 
       Serial.print(F("Weather in "));
@@ -86,7 +93,7 @@ void loop() {
       Serial.println(":");
       Serial.println(F("OPEN WEATHER: "));
       Serial.print(F("The weather is "));
-      Serial.println(description);
+      //Serial.println(description);
       Serial.print(F("Humidity: "));
       Serial.print(hum);
       Serial.print(F(".00%  Temperature: "));
@@ -143,36 +150,40 @@ void loop() {
     uint16_t y = tbh;
     display.setCursor(x,y);
     display.fillScreen(GxEPD_WHITE);
-    display.print(F("Weather in "));
-    display.print(location);
-    display.println(":");
+    display.println((String)"Weather in " + location + ":");
     display.println(F("Outside Temp from web: "));
-    display.print(F("Humidity: "));
-    display.print(hum); display.println("%");
-    display.print(F("Temperature: "));
-    display.print(temp); display.println("C");
-    display.print(F("Feels like: "));
-    display.print(hindex- 273.15);
-    display.println(F("C"));
-    display.println();
-    
+    display.println((String)"Humidity: " + hum + "%");
+    display.println((String)"Temperature: " + temp + "C");
+    display.println((String)"Feels like: " + hindex + "C");
+    if (WiFi.status() != WL_CONNECTED) {
+      display.println("not connected to Wifi");
+    } 
+    else{
+      display.println();
+    }
 
     display.println(F("Indoor Temp Sensor: ")); 
-    display.print(F("Humidity: "));
-    display.print(h);
-    display.println(F("%"));
-    display.print(F("Temperature: "));
-    display.print(t);
-    display.println(F("C"));
-    display.print(F("Feels like: "));
-    display.print(hic);
-    display.println(F("C "));
-
-
+    display.println((String)"Humidity: " + h + "%");
+    display.println((String)"Temperature: " + t + "C");
+    display.println((String)"Feels like: " + hic + "C");
   }
   while (display.nextPage());
 
+// go to sleep mode
   display.powerOff();
+  WiFi.disconnect(true);
+  WiFi.mode(WIFI_OFF);
+  btStop();
+  adc_power_off();
+  esp_wifi_stop();
+  esp_bt_controller_disable();
+  esp_sleep_pd_config(ESP_PD_DOMAIN_MAX, ESP_PD_OPTION_OFF);
+  esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_OFF);
+  esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_SLOW_MEM, ESP_PD_OPTION_OFF);
+  esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_FAST_MEM, ESP_PD_OPTION_OFF);
   esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
   esp_deep_sleep_start();
+}
+
+void loop() {
 }
