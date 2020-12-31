@@ -37,6 +37,9 @@ float hindex;
 int hum;
 const char* description;
 
+#define uS_TO_S_FACTOR 1000000  /* Conversion factor for micro seconds to seconds */
+#define TIME_TO_SLEEP  10        /* Time ESP32 will go to sleep (in seconds) */
+
 void setup() {
   Serial.begin(115200);
   delay(100);
@@ -144,8 +147,6 @@ void loop() {
     display.print(location);
     display.println(":");
     display.println(F("Outside Temp from web: "));
-    //display.print(F("The weather is "));
-    //display.println(description);
     display.print(F("Humidity: "));
     display.print(hum); display.println("%");
     display.print(F("Temperature: "));
@@ -171,5 +172,7 @@ void loop() {
   }
   while (display.nextPage());
 
-  delay(50000);
+  display.powerOff();
+  esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
+  esp_deep_sleep_start();
 }
