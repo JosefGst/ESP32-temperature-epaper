@@ -171,5 +171,5 @@ void loop() {
   }
   while (display.nextPage());
 
-  delay(30000);
+  delay(50000);
 }
